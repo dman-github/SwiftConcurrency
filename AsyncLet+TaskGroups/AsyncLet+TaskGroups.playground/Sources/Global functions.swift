@@ -41,9 +41,9 @@ public func multipleComputationsAsync_checks_task_cancellation(computations num:
                                                               startDate: Date, tag: String) async throws -> Int {
     printWithThreadInfo(tag: "Computation started for \(tag)", executionStart: startDate)
     for i in 1...num {
-        try Task.checkCancellation()
+        try Task.checkCancellation() // Not necessary because Task.sleep will automatically check Task status
         try await Task.sleep(seconds: 0.25)
-        try Task.checkCancellation()
+        try Task.checkCancellation()  // Not necessary because Task.sleep will automatically check Task status
         printWithThreadInfo(tag: "Computation \(i) done for \(tag) cancel\(Task.isCancelled)", executionStart: startDate)
     }
     printWithThreadInfo(tag: "Computation ended for \(tag)", executionStart: startDate)

@@ -6,7 +6,7 @@ func resetParams() {
     pgStartD = Date()
 }
 
-/**
+/** 1
  The function below executes 2 async pieces of work. Each computation does some work and
  returns an integer value. It has the following benefits compared to traditionaly GCD/Operations.
  
@@ -34,7 +34,7 @@ func runComputationWithoutAsyncLet() async {
             printWithThreadInfo(tag: "computationWithoutAsyncLet has error", executionStart: pgStartD)
         }
 }
-/**
+/** 2
  Structured concurrency using async-let
  
  Async-let allows us to achieve parallel execution. Here we annotated the firstComputation and secondComputation with the async-let keyword, no await keyword so the program flow will continue to call the 2nd multipleComputationsAsync. At the end where we are waiting for the result from the async tasks, we will pause until results from 1st call and 2nd calls are received or any of them raises an exception as indicated by the try keyword.
@@ -65,52 +65,75 @@ func runComputationWithAsyncLet() async {
         }
 }
 
-/**
+/** 3
  Cooperative Cancellation
  
 The concept of parent and child task relationship is important in modern swift concurrency.
 
 (1) Many properties of the Parent Task like task priorities are propagated to the child.
-(2) A parent task can only finish if all its child tasks are finished
-(3) If one of the child task errors,
+(2) A parent task can only finish if all its child tasks are finished/fail
+(3) If one of the child task errors, then the error gets propagated to the parent which is awaiting on it.
+    But before the parent can throw the error  it must wait for the other tasks to complete. The parent sets
+    the cacellation flag of all its child tasks and waits for them to complete. Therefore it is important to check
+    this cancellation flag on all child tasks and finish gracefully.
+(4) The order that async let variables are awaited by the parent is important as shown in the next
+    2 examples.
  
+ Note: Some async tasks under Foundation like Task.Sleep automatically complete when its Task is cancelled.
  
  */
-func computationWithAsyncLet_Errors_No_Cancel_Check(executionStart: Date) async throws -> (Int,Int) {
+func computationWithAsyncLet_errors1(executionStart: Date) async throws -> (Int,Int) {
     async let firstComputation = multipleComputationsAsync(computations: 4,
                                                                startDate: executionStart, tag: "E")
     async let secondComputation = multipleComputationsAsync_errors(computations: 4,
                                                                 startDate: executionStart, tag: "F")
-    return try await (firstComputation,secondComputation)
+    /*
+     Here await (secondComputation,firstComputation) means the parent task awaits its child task in that order.
+     we can also write this as
+     
+      try await secondComputation
+      try await firstComputation
+     
+    The order is important here because when the task (secondComputation) throws the error, the parent task receives the error and cancels all the other tasks.
+    As cooperative cancellation is in place the task (firstComputation) will finish. An finally the parent task will throw the error.
+    In this example the parent task will throw the error as soon as the task(secondComputation) throws the error.
+     
+     The opposite scenario is seen in the next example.
+     */
+    return try await (secondComputation,firstComputation)
 }
-func runComputationWithAsyncLet_Errors_No_Cancel_Check() async {
+func runComputationWithAsyncLet_errors1() async {
         do {
-            printWithThreadInfo(tag: "begin Async Let", executionStart: pgStartD)
-            let result = try await computationWithAsyncLet_Errors_No_Cancel_Check(executionStart: pgStartD)
-            printWithThreadInfo(tag: "end Async Let, result: \(result.0) + \(result.1)",
+            printWithThreadInfo(tag: "begin Async Let Error", executionStart: pgStartD)
+            let result = try await computationWithAsyncLet_errors1(executionStart: pgStartD)
+            printWithThreadInfo(tag: "end Async Let Errors, result: \(result.0) + \(result.1)",
                                 executionStart: pgStartD)
         } catch {
-            printWithThreadInfo(tag: "runComputationWithAsyncLet_Errors_No_Cancel_Check has error: \(error)",
+            printWithThreadInfo(tag: "runComputationWithAsyncLet_errors has error: \(error)",
                                 executionStart: pgStartD)
         }
 }
 
-func computationWithAsyncLet_errors_cancel_check(executionStart: Date) async throws -> (Int,Int) {
+/* 4
+ Now await (firstComputation,secondComputation) in this case when the secondComputation throws the error. The parent task does not
+ receive it because it is awaiting the completion of task (firstComputation) which carries on for 4 computations. Only after this does the parent await the task (secondComputation) and receive the error.
+ In this example the parent task will throw the error only after the task (firstComputation) completes.
+ */
+func computationWithAsyncLet_errors2(executionStart: Date) async throws -> (Int,Int) {
     async let firstComputation = multipleComputationsAsync_checks_task_cancellation(computations: 4,
                                                                startDate: executionStart, tag: "G")
     async let secondComputation = multipleComputationsAsync_errors(computations: 4,
                                                                 startDate: executionStart, tag: "H")
-    let poo = try await firstComputation + secondComputation
-    return (0,0)
+    return try await (firstComputation,secondComputation)
 }
-func runComputationWithAsyncLet_errors_cancel_check() async {
+func runComputationWithAsyncLet_errors2() async {
     do {
-        printWithThreadInfo(tag: "begin Async Let", executionStart: pgStartD)
-        let result = try await computationWithAsyncLet_errors_cancel_check(executionStart: pgStartD)
-        printWithThreadInfo(tag: "end Async Let, result: \(result.0) + \(result.1)",
+        printWithThreadInfo(tag: "begin Async Let Errors 2", executionStart: pgStartD)
+        let result = try await computationWithAsyncLet_errors2(executionStart: pgStartD)
+        printWithThreadInfo(tag: "end Async Let Errors 2, result: \(result.0) + \(result.1)",
                             executionStart: pgStartD)
     } catch {
-        printWithThreadInfo(tag: "runComputationWithAsyncLet_errors_cancel_check has error: \(error)",
+        printWithThreadInfo(tag: "computationWithAsyncLet_errors2 has error: \(error)",
                             executionStart: pgStartD)
     }
 }
@@ -122,9 +145,9 @@ Task { @MainActor in
     resetParams()
     await runComputationWithAsyncLet()
     resetParams()
-    await runComputationWithAsyncLet_Errors_No_Cancel_Check()
+    await runComputationWithAsyncLet_errors1()
     resetParams()
-    await runComputationWithAsyncLet_errors_cancel_check()
+    await runComputationWithAsyncLet_errors2()
     printWithThreadInfo(tag: "all computations ended", executionStart: pgStartD)
 }
 
