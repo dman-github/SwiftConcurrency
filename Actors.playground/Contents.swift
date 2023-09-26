@@ -184,6 +184,118 @@ func actorExampleNoMoreRaceCondition() async  {
     myKitchen.printWhatTypeOfCuisineNonIsolated() // This is ok because we have marked method as not isolated
 }
 
+/* 5
+ 
+ The Main Actor differs from the Actor in that any work executed from it only executes on the main thread.
+ 
+ Thread:<_NSMainThread: 0x6000018d8400>{number = 1, name = main}    tag:Actor method read numberOrdersBeingPrepared old:0 new:1     isMain:true
+ Thread:<_NSMainThread: 0x6000018d8400>{number = 1, name = main}    tag:Actor method aMealStartsPreparing for Task :    isMain:true
+ Thread:<_NSMainThread: 0x6000018d8400>{number = 1, name = main}    tag:Actor method read numberOrdersBeingPrepared old:1 new:2     isMain:true
+ Thread:<_NSMainThread: 0x6000018d8400>{number = 1, name = main}    tag:Actor method aMealStartsPreparing for Task :    isMain:true
+ */
+@MainActor
+class KitchenOnMainStreet {
+    @TaskLocal static var id = ""  // Used to track which task is the parent as they are all running concurrently
+    nonisolated init() {}
+    var numberOrdersBeingPrepared: Int = 0 {
+        didSet{
+            printWithThreadInfo(tag: "Actor method read numberOrdersBeingPrepared old:\(oldValue) new:\(numberOrdersBeingPrepared) ")
+        }
+    }
+    let type = "Indian"
+    
+    func aMealStartsPreparing() {
+        numberOrdersBeingPrepared += 1
+        printWithThreadInfo(tag: "Actor method aMealStartsPreparing for Task :\(KitchenOnMainStreet.id)")
+        
+    }
+    
+    func aMealStopsPreparing() {
+        numberOrdersBeingPrepared += 1
+        printWithThreadInfo(tag: "Actor method aMealStopsPreparing for Task :\(KitchenOnMainStreet.id)")
+    }
+    
+    func aMealStartsPreparingFromANewTask() {
+        Task {
+            numberOrdersBeingPrepared += 1
+            printWithThreadInfo(tag: "Actor method aMealStartsPreparingFromANewTask for Task :\(KitchenOnMainStreet.id)")
+        }
+    }
+    
+    func aMealStartsPreparingFromADetachedTask1() {
+        Task.detached() {@MainActor in
+            // Closure is tagged to run with mainActor context
+            self.numberOrdersBeingPrepared += 1
+            printWithThreadInfo(tag: "Actor method aMealStartsPreparingFromADetachedTask1 for Task :\(KitchenOnMainStreet.id)")
+        }
+    }
+    
+    func aMealStartsPreparingFromADetachedTask2() {
+        Task.detached() {
+            printWithThreadInfo(tag: "Actor method aMealStartsPreparingFromADetachedTask2 BEFORE run for Task :\(await KitchenOnMainStreet.id)")
+            await MainActor.run {
+                // Closure run on mainActor context
+                self.numberOrdersBeingPrepared += 1
+                printWithThreadInfo(tag: "Actor method aMealStartsPreparingFromADetachedTask2 for Task :\(KitchenOnMainStreet.id)")
+            }
+        }
+    }
+}
+
+func mainActorExample() async  {
+    let myKitchen = KitchenOnMainStreet()
+    async let t1 = Task {
+        await Kitchen.$id.withValue("7th") {
+            await myKitchen.aMealStartsPreparing()
+            print("Task \(Kitchen.id) reading \(await myKitchen.numberOrdersBeingPrepared)")
+        }
+    }
+    
+    async let t2 = Task {
+        await Kitchen.$id.withValue("8th") {
+            await myKitchen.aMealStartsPreparing()
+            print("Task \(Kitchen.id) reading \(await myKitchen.numberOrdersBeingPrepared)")
+        }
+    }
+    // Spawn child tasks concurrently and await them.
+    // To ensure serial execuation of the main functions
+    await (t1.result,t2.result)
+}
+
+/* 6
+ Accessing the actor methods and variables from outside the actor
+ 
+ aMealStartsPreparingFromANewTask: We are creating a Unstructured Task, so it inherits the main actor context from its calling function, which is a
+ method of the MainActor class KitchenOnMainStreet. We are still inside the actor.
+ 
+ aMealStartsPreparingFromADetachedTask1: Detached task do not inherit any context from its calling function. We get compiler errors because we are using actor variables from out side the actor. Fixed by using the @Mainactor keyword
+ 
+ aMealStartsPreparingFromADetachedTask2: Detached task do not inherit any context from its calling function. We get compiler errors because we are using actor variables from out side the actor. Fixed by using MainActor.run
+ 
+ 
+ Result: 
+ d:<_NSMainThread: 0x6000011800c0>{number = 1, name = main}    tag:Actor method read numberOrdersBeingPrepared old:0 new:1     isMain:true
+ Thread:<_NSMainThread: 0x6000011800c0>{number = 1, name = main}    tag:Actor method aMealStartsPreparingFromANewTask for Task :    isMain:true
+ Thread:<_NSMainThread: 0x6000011800c0>{number = 1, name = main}    tag:Actor method read numberOrdersBeingPrepared old:1 new:2     isMain:true
+ Thread:<_NSMainThread: 0x6000011800c0>{number = 1, name = main}    tag:Actor method aMealStartsPreparingFromADetachedTask1 for Task :    isMain:true
+ Thread:<NSThread: 0x60000119dac0>{number = 6, name = (null)}    tag:Actor method aMealStartsPreparingFromADetachedTask2 BEFORE run for Task :    isMain:false
+ Thread:<_NSMainThread: 0x6000011800c0>{number = 1, name = main}    tag:Actor method read numberOrdersBeingPrepared old:2 new:3     isMain:true
+ Thread:<_NSMainThread: 0x6000011800c0>{number = 1, name = main}    tag:Actor method aMealStartsPreparingFromADetachedTask2 for Task :    isMain:true
+ */
+
+func actorAccessFromTasks() async {
+    let myKitchen = KitchenOnMainStreet()
+    await Kitchen.$id.withValue("9th") {
+        await myKitchen.aMealStartsPreparingFromANewTask()
+    }
+    await Kitchen.$id.withValue("10th") {
+        await myKitchen.aMealStartsPreparingFromADetachedTask1()
+    }
+    await Kitchen.$id.withValue("11th") {
+        await myKitchen.aMealStartsPreparingFromADetachedTask2()
+    }
+}
+
 Task { @MainActor in
     await actorExample()
     resetParams()
@@ -192,6 +304,10 @@ Task { @MainActor in
     await actorExampleNoMoreRaceCondition()
     resetParams()
     await actorReadIsolationError()
+    resetParams()
+    await mainActorExample()
+    resetParams()
+    await actorAccessFromTasks()
 }
 
 
