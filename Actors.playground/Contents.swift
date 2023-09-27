@@ -218,6 +218,7 @@ class KitchenOnMainStreet {
     func aMealStartsPreparingFromANewTask() {
         Task {
             numberOrdersBeingPrepared += 1
+            // The KitchenOnMainStreet.id is set to the parent task value as local variables are copied over
             printWithThreadInfo(tag: "Actor method aMealStartsPreparingFromANewTask for Task :\(KitchenOnMainStreet.id)")
         }
     }
@@ -225,6 +226,7 @@ class KitchenOnMainStreet {
     func aMealStartsPreparingFromADetachedTask1() {
         Task.detached() {@MainActor in
             // Closure is tagged to run with mainActor context
+            // The KitchenOnMainStreet.id is set to the dafault as local variables are not copied over
             self.numberOrdersBeingPrepared += 1
             printWithThreadInfo(tag: "Actor method aMealStartsPreparingFromADetachedTask1 for Task :\(KitchenOnMainStreet.id)")
         }
@@ -232,6 +234,8 @@ class KitchenOnMainStreet {
     
     func aMealStartsPreparingFromADetachedTask2() {
         Task.detached() {
+            // run on non-main actor context
+            // The KitchenOnMainStreet.id is set to the dafault as local variables are not copied over
             printWithThreadInfo(tag: "Actor method aMealStartsPreparingFromADetachedTask2 BEFORE run for Task :\(await KitchenOnMainStreet.id)")
             await MainActor.run {
                 // Closure run on mainActor context
@@ -245,14 +249,14 @@ class KitchenOnMainStreet {
 func mainActorExample() async  {
     let myKitchen = KitchenOnMainStreet()
     async let t1 = Task {
-        await Kitchen.$id.withValue("7th") {
+        await KitchenOnMainStreet.$id.withValue("7th") {
             await myKitchen.aMealStartsPreparing()
             print("Task \(Kitchen.id) reading \(await myKitchen.numberOrdersBeingPrepared)")
         }
     }
     
     async let t2 = Task {
-        await Kitchen.$id.withValue("8th") {
+        await KitchenOnMainStreet.$id.withValue("8th") {
             await myKitchen.aMealStartsPreparing()
             print("Task \(Kitchen.id) reading \(await myKitchen.numberOrdersBeingPrepared)")
         }
@@ -273,7 +277,7 @@ func mainActorExample() async  {
  aMealStartsPreparingFromADetachedTask2: Detached task do not inherit any context from its calling function. We get compiler errors because we are using actor variables from out side the actor. Fixed by using MainActor.run
  
  
- Result: 
+ Result:
  d:<_NSMainThread: 0x6000011800c0>{number = 1, name = main}    tag:Actor method read numberOrdersBeingPrepared old:0 new:1     isMain:true
  Thread:<_NSMainThread: 0x6000011800c0>{number = 1, name = main}    tag:Actor method aMealStartsPreparingFromANewTask for Task :    isMain:true
  Thread:<_NSMainThread: 0x6000011800c0>{number = 1, name = main}    tag:Actor method read numberOrdersBeingPrepared old:1 new:2     isMain:true
@@ -285,13 +289,13 @@ func mainActorExample() async  {
 
 func actorAccessFromTasks() async {
     let myKitchen = KitchenOnMainStreet()
-    await Kitchen.$id.withValue("9th") {
+    await KitchenOnMainStreet.$id.withValue("9th") {
         await myKitchen.aMealStartsPreparingFromANewTask()
     }
-    await Kitchen.$id.withValue("10th") {
+    await KitchenOnMainStreet.$id.withValue("10th") {
         await myKitchen.aMealStartsPreparingFromADetachedTask1()
     }
-    await Kitchen.$id.withValue("11th") {
+    await KitchenOnMainStreet.$id.withValue("11th") {
         await myKitchen.aMealStartsPreparingFromADetachedTask2()
     }
 }
