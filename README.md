@@ -48,8 +48,3 @@ Main Actor. A Task created from a function having `@MainActor` will also inherit
 
 Feel free to explore the playgrounds in this repository to better understand Swift's concurrency features.
 
-[![Open in Swift Playgrounds](https://img.shields.io/badge/Open%20in-Swift%20Playgrounds-blue?style=for-the-badge&logo=swift)](swift://https://example.com)
-
----
-
-**Note:** Make sure to open these playgrounds in a Swift-compatible environment to run and explore the code effectively.
