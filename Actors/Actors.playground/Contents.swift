@@ -49,17 +49,17 @@ actor Kitchen {
     func aMealStartsPreparingSafe() {
         numberOrdersBeingPrepared += 1
         printWithThreadInfo(tag: "Actor method aMealStartsPreparingSafe for Task :\(Kitchen.id)")
-        howManyMealsAreBeingPreparing()
+        howManyMealsAreBeingPrepared()
         
     }
     
     func aMealStopsPreparingSafe() {
         numberOrdersBeingPrepared += 1
         printWithThreadInfo(tag: "Actor method aMealStopsPreparingSafe for Task :\(Kitchen.id)")
-        howManyMealsAreBeingPreparing()
+        howManyMealsAreBeingPrepared()
     }
     
-    func howManyMealsAreBeingPreparing() {
+    func howManyMealsAreBeingPrepared() {
         print(numberOrdersBeingPrepared)
     }
     
@@ -145,7 +145,7 @@ func actorExampleRaceCondition() async  {
 
 
 /*
- Result with not more race conditions
+ Result with no more race conditions
 Thread:<NSThread: 0x6000005df680>{number = 5, name = (null)}    tag:Actor method read numberOrdersBeingPrepared old:0 new:1     isMain:false
 Thread:<NSThread: 0x6000005df680>{number = 5, name = (null)}    tag:Actor method aMealStartsPreparingSafe for Task :5th    isMain:false
 1
@@ -174,7 +174,7 @@ func actorExampleNoMoreRaceCondition() async  {
  Using nonisolated keyword
  
  Some actor methods that do not access immuable state would not need to be called using the await keyword.
- However the compiler will falg an error. We have to explicitely mark the method as nonisolated to to tell
+ However the compiler will flag an error. We have to explicitely mark the method as nonisolated to to tell
  the compiler that we have confirmed that the method is not accessing mutable state
  
  */
